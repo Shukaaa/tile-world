@@ -1,0 +1,380 @@
+import { TWMConfig, TWMLayer } from "../../config/interfaces/twm-config";
+import { SceneBuilderSettings } from "../interfaces/SceneBuilderSettings";
+import { TWErrorHandler } from "../../core/error/TWErrorHandler";
+import { TWErrorCode } from "../../core/error/TWErrorCode";
+import { TileValidator } from "../../core/validator/TileValidator";
+import { SceneBuilderUtils } from "../utils/SceneBuilderUtils";
+import { OnTileClickedCallbackFn } from "../interfaces/SceneBuilderEvent";
+
+/**
+ * SceneBuilder is responsible for constructing and managing a tile-based scene.
+ * It handles layers, tiles, settings, and user interactions within a specified container.
+ *
+ * @class SceneBuilder
+ */
+export class SceneBuilder {
+	private container: HTMLElement;
+	private config: TWMConfig;
+	private settings: SceneBuilderSettings;
+	
+	private hiddenLayers: string[] = [];
+	private runtimeLayers: TWMLayer[] = [];
+	private onTileClickedEventSubscriber: OnTileClickedCallbackFn[] = [];
+	
+	/**
+	 * Creates an instance of SceneBuilder.
+	 *
+	 * @constructor
+	 * @param {string} selector - CSS selector for the container element.
+	 * @param {TWMConfig} config - Configuration object for the scene.
+	 * @param {SceneBuilderSettings} settings - Settings for scene behavior and appearance.
+	 * @throws {TWErrorCode.INVALID_QUERY} If the selector does not match any element.
+	 * @throws {TWErrorCode.MISSING_OR_INVALID_CONFIG} If the configuration is invalid or incomplete.
+	 */
+	constructor(selector: string, config: TWMConfig, settings: SceneBuilderSettings) {
+		const el = document.querySelector(selector);
+		if (!el) {
+			TWErrorHandler.throw(
+					TWErrorCode.INVALID_QUERY,
+					`Invalid query with selector: "${selector}". No element found.`,
+					`selector: ${selector}`,
+					'SceneBuilder'
+			);
+		}
+		
+		if (!config || !config.layers || !config.main || !config.tilesets) {
+			TWErrorHandler.throw(
+					TWErrorCode.MISSING_OR_INVALID_CONFIG,
+					'Invalid or missing configuration. Configuration values are required for the SceneBuilder.',
+					JSON.stringify(config),
+					'SceneBuilder'
+			);
+		}
+		
+		this.container = el as HTMLElement;
+		this.config = config;
+		this.settings = {
+			showDebugGrid: false,
+			upscale: 1,
+			disableDataAttributesForTiles: false,
+			...settings,
+		};
+		
+		this.buildScene();
+	}
+	
+	// === Settings ===
+	/**
+	 * Updates the scene's settings with new values. It does not rerender automatically.
+	 *
+	 * @public
+	 * @param {Partial<SceneBuilderSettings>} newSettings - Partial settings to update.
+	 * @returns {void}
+	 */
+	public changeSettings(newSettings: Partial<SceneBuilderSettings>): void {
+		this.settings = { ...this.settings, ...newSettings };
+	}
+	
+	// === Layer Handling ===
+	/**
+	 * Checks if a layer is currently hidden.
+	 *
+	 * @public
+	 * @param {string} layerName - Name of the layer to check.
+	 * @returns {boolean} True if the layer is hidden; otherwise, false.
+	 */
+	public isLayerHidden(layerName: string): boolean {
+		return this.hiddenLayers.includes(layerName);
+	}
+	
+	/**
+	 * Hides a specified layer from view.
+	 *
+	 * @public
+	 * @param {string} layerName - Name of the layer to hide.
+	 * @returns {void}
+	 */
+	public hideLayer(layerName: string): void {
+		if (!this.isLayerHidden(layerName)) {
+			this.hiddenLayers.push(layerName);
+			const el = this.container.querySelector(`.tw-layer--${layerName}`) as HTMLElement;
+			if (el) el.style.display = 'none';
+		}
+	}
+	
+	/**
+	 * Shows a specified hidden layer.
+	 *
+	 * @public
+	 * @param {string} layerName - Name of the layer to show.
+	 * @returns {void}
+	 */
+	public showLayer(layerName: string): void {
+		if (this.isLayerHidden(layerName)) {
+			this.hiddenLayers = this.hiddenLayers.filter(name => name !== layerName);
+			const el = this.container.querySelector(`.tw-layer--${layerName}`) as HTMLElement;
+			if (el) el.style.display = 'grid';
+		}
+	}
+	
+	/**
+	 * Toggles the visibility of a layer.
+	 *
+	 * @public
+	 * @param {string} layerName - Name of the layer to toggle.
+	 * @returns {void}
+	 */
+	public toggleLayer(layerName: string): void {
+		this.isLayerHidden(layerName) ? this.showLayer(layerName) : this.hideLayer(layerName);
+	}
+	
+	/**
+	 * Creates a new runtime layer with the given name.
+	 * This does not trigger a rerender automatically.
+	 * However, the layer usually renders after adding at least one tile,
+	 * since the `addTile` method triggers an automatic layer rerender.
+	 *
+	 * @public
+	 * @param {string} layerName - Name of the new layer.
+	 * @throws {TWErrorCode.LAYER_ALREADY_EXISTS} If a layer with the same name already exists.
+	 * @returns {void}
+	 */
+	public createRuntimeLayer(layerName: string): void {
+		const exists = this.config.layers.some(l => l.name === layerName)
+				|| this.runtimeLayers.some(l => l.name === layerName);
+		
+		if (exists) {
+			TWErrorHandler.throw(
+					TWErrorCode.LAYER_ALREADY_EXISTS,
+					`Layer with name "${layerName}" already exists.`,
+					`layerName: ${layerName}`,
+					'SceneBuilder'
+			);
+		}
+		
+		const tiles = SceneBuilderUtils.createEmpty2DArray(this.config.main.width, this.config.main.height);
+		this.runtimeLayers.push({ name: layerName, tiles });
+		this.addRuntimeLayerToDOM(layerName)
+	}
+	
+	// === Tile Handling ===
+	/**
+	 * Adds a tile to a specified layer at given coordinates. It automatically rerender the layer.
+	 *
+	 * @public
+	 * @param {string} layerName - Name of the layer.
+	 * @param {number} x - X-coordinate of the tile.
+	 * @param {number} y - Y-coordinate of the tile.
+	 * @param {string} tileCode - Code representing the tile.
+	 * @throws {TWErrorCode.LAYER_NOT_FOUND} If the specified layer does not exist.
+	 * @throws {TWErrorCode.INVALID_TILE_POSITION} If the coordinates are out of bounds.
+	 * @returns {void}
+	 */
+	public addTile(layerName: string, x: number, y: number, tileCode: string): void {
+		TileValidator.validateTileFormat(tileCode, `addTile: ${tileCode} @ (${x},${y})`);
+		const layer = this.runtimeLayers.find(l => l.name === layerName);
+		
+		if (!layer) {
+			TWErrorHandler.throw(
+					TWErrorCode.LAYER_NOT_FOUND,
+					`Layer "${layerName}" does not exist.`,
+					`layerName: ${layerName}`,
+					'SceneBuilder'
+			);
+		}
+		
+		const { width, height } = this.config.main;
+		if (x < 0 || x >= width || y < 0 || y >= height) {
+			TWErrorHandler.throw(
+					TWErrorCode.INVALID_TILE_POSITION,
+					`Invalid position (${x}, ${y}) for layer "${layerName}".`,
+					`x: ${x}, y: ${y}, width: ${width}, height: ${height}`,
+					'SceneBuilder'
+			);
+		}
+		
+		layer.tiles[y][x] = tileCode;
+		this.updateTileInDOM(layerName, x, y);
+	}
+	
+	/**
+	 * Remove a tile at a specified layer at given coordinates. It automatically rerender the layer.
+	 *
+	 * @public
+	 * @param {string} layerName - Name of the layer.
+	 * @param {number} x - X-coordinate of the tile.
+	 * @param {number} y - Y-coordinate of the tile.
+	 * @throws {TWErrorCode.LAYER_NOT_FOUND} If the specified layer does not exist.
+	 * @throws {TWErrorCode.INVALID_TILE_POSITION} If the coordinates are out of bounds.
+	 * @returns {void}
+	 */
+	public removeTile(layerName: string, x: number, y: number): void {
+		const layer = this.runtimeLayers.find(l => l.name === layerName);
+		
+		if (!layer) {
+			TWErrorHandler.throw(
+					TWErrorCode.LAYER_NOT_FOUND,
+					`Layer "${layerName}" does not exist.`,
+					`layerName: ${layerName}`,
+					'SceneBuilder'
+			);
+		}
+		
+		const { width, height } = this.config.main;
+		if (x < 0 || x >= width || y < 0 || y >= height) {
+			TWErrorHandler.throw(
+					TWErrorCode.INVALID_TILE_POSITION,
+					`Invalid position (${x}, ${y}) for layer "${layerName}".`,
+					`x: ${x}, y: ${y}, width: ${width}, height: ${height}`,
+					'SceneBuilder'
+			);
+		}
+		
+		layer.tiles[y][x] = "0";
+		this.updateTileInDOM(layerName, x, y);
+	}
+	
+	/**
+	 * Rebuilds the entire scene from scratch.
+	 * Useful when critical settings have changed.
+	 * **⚠ This is performance-intensive — only use when absolutely necessary.**
+	 *
+	 * @public
+	 * @returns {void}
+	 */
+	public refresh(): void {
+		this.buildScene();
+	}
+	
+	// === Events ===
+	
+	/**
+	 * Subscribes a callback function to the tile clicked event.
+	 *
+	 * @public
+	 * @param {OnTileClickedCallbackFn} cb - Callback function to invoke when a tile is clicked.
+	 * @returns {void}
+	 */
+	public onTileClickedEvent(cb: OnTileClickedCallbackFn): void {
+		this.onTileClickedEventSubscriber.push(cb);
+	}
+	
+	// === Utilities ===
+	
+	/**
+	 * Creates a DOM element for a given tile code with optional scaling.
+	 *
+	 * @public
+	 * @param {string} tileCode - Code representing the tile.
+	 * @param {number} [customScale] - Optional custom scale factor.
+	 * @returns {HTMLDivElement} The HTML element representing the tile.
+	 */
+	public getTileAsElement(tileCode: string, customScale?: number): HTMLDivElement {
+		const tileSize = this.config.main.tileSize;
+		const scale = customScale ?? this.settings.upscale!;
+		const promises: Promise<void>[] = [];
+		
+		return SceneBuilderUtils.createTileElement(
+				tileCode,
+				0, 0,
+				this.config,
+				this.settings,
+				tileSize * scale,
+				tileSize,
+				promises,
+				[]
+		);
+	}
+	
+	// === Internals ===
+	private buildScene(): void {
+		const { width, height, tileSize: baseSize } = this.config.main;
+		const scale = this.settings.upscale!;
+		const tileSize = baseSize * scale;
+		
+		const wrapper = document.createElement('div');
+		wrapper.className = 'tw-scene-wrapper';
+		wrapper.style.position = 'relative';
+		wrapper.style.width = `${width * tileSize}px`;
+		wrapper.style.height = `${height * tileSize}px`;
+		
+		const promises: Promise<void>[] = [];
+		const allLayers = [...this.config.layers, ...this.runtimeLayers];
+		
+		for (const layer of allLayers) {
+			const grid = SceneBuilderUtils.createGridElement(
+					layer,
+					this.config,
+					this.settings,
+					tileSize,
+					baseSize,
+					promises,
+					this.onTileClickedEventSubscriber
+			);
+			wrapper.appendChild(grid);
+		}
+		
+		this.container.innerHTML = '';
+		this.container.appendChild(wrapper);
+		
+		Promise.all(promises).catch(err => {
+			console.error('SceneBuilder: Error loading tilesets', err);
+		});
+	}
+	
+	public updateTileInDOM(layerName: string, x: number, y: number): void {
+		const layerEl = this.container.querySelector(`.tw-layer--${layerName}`) as HTMLDivElement;
+		if (!layerEl) return;
+		
+		const tileIndex = y * this.config.main.width + x;
+		const oldTileEl = layerEl.children[tileIndex] as HTMLDivElement;
+		if (!oldTileEl) return;
+		
+		const tileCode = this.getTileCodeFromLayer(layerName, x, y);
+		const tileEl = SceneBuilderUtils.createTileElement(
+				tileCode, x, y, this.config, this.settings,
+				this.config.main.tileSize * this.settings.upscale!,
+				this.config.main.tileSize,
+				[],
+				this.onTileClickedEventSubscriber
+		);
+		
+		layerEl.replaceChild(tileEl, oldTileEl);
+	}
+	
+	private getTileCodeFromLayer(layerName: string, x: number, y: number): string {
+		const layer = this.runtimeLayers.find(l => l.name === layerName)
+				?? this.config.layers.find(l => l.name === layerName);
+		return layer?.tiles?.[y]?.[x] ?? "0";
+	}
+	
+	private addRuntimeLayerToDOM(layerName: string): void {
+		const { width, height, tileSize: baseSize } = this.config.main;
+		const scale = this.settings.upscale!;
+		const tileSize = baseSize * scale;
+		
+		const tiles = SceneBuilderUtils.createEmpty2DArray(width, height);
+		const newLayer: TWMLayer = { name: layerName, tiles };
+		this.runtimeLayers.push(newLayer);
+		
+		const promises: Promise<void>[] = [];
+		const layerEl = SceneBuilderUtils.createGridElement(
+				newLayer,
+				this.config,
+				this.settings,
+				tileSize,
+				baseSize,
+				promises,
+				this.onTileClickedEventSubscriber
+		);
+		
+		const wrapper = this.container.querySelector('.tw-scene-wrapper');
+		if (wrapper) {
+			wrapper.appendChild(layerEl);
+		}
+		
+		Promise.all(promises).catch(err => {
+			console.error('SceneBuilder::addRuntimeLayerToDOM: Error loading tileset', err);
+		});
+	}
+}

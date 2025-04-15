@@ -1,0 +1,18 @@
+[main]
+tileSize    = 16
+width       = 3
+height      = 3
+
+[tileset:grass]
+tileset     = ./assets/tileset/Grass.png
+short       = G
+
+[tileset:furniture]
+tileset     = ./assets/tileset/Furniture.png
+short       = FN
+
+[layer:ground]
+tiles 		= G0,G1,G2; G11,G12,G13; G22,G23,G24;
+
+[layer:flowers]
+tiles 		= 0,0,0; 0,G64,0; 0,0,0;
