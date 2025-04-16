@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
+    <meta charset="UTF-8"/>
     <title>TileWorld – Place on Grid Example</title>
-    <link rel="stylesheet" href="./assets/css/example-styling.css" />
+    <link rel="stylesheet" href="./assets/css/example-styling.css"/>
     <style>
         #toolbar {
             display: flex;
@@ -45,6 +45,7 @@
 <div id="toolbar"></div>
 <span id="selectedText">None Selected</span>
 <blockquote>Press Mouse-Wheel to remove furniture</blockquote>
+<blockquote>You can not place furniture on flowers</blockquote>
 
 <script src="../dist/tileworld.umd.js"></script>
 <script>
@@ -54,15 +55,22 @@
 
 		console.log("Config:", twm.getConfig());
 
-		twm.createScene("#scene", { upscale: 5 });
+		twm.createScene("#scene", {upscale: 5});
 		twm.scene.createRuntimeLayer("furniture");
 
 		// Handle tile placement on click
 		twm.scene.onTileClickedEvent((event) => {
-			const { button } = event.originalMouseEvent;
-			const { x, y } = event;
+			const {button} = event.originalMouseEvent;
+			const {x, y} = event;
 
 			if (button === 0) {
+				// Disable placement on flower tiles
+				const tileProps = twm.scene.getProps(x, y)
+				if (tileProps.isFlower && window.selectedFurnitureTile !== "0") {
+					alert("You can not place furniture on flowers!")
+					return
+				}
+
 				// Left-click: place selected furniture
 				twm.scene.addTile("furniture", x, y, window.selectedFurnitureTile);
 			} else if (button === 1) {

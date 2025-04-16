@@ -15,8 +15,15 @@ export interface TWMTileset {
 	short: string;
 }
 
+export interface TWMPropsMap {
+	tilesets: Record<string, Record<string, string>>;
+	layers: Record<string, Record<string, string>>;
+	tiles: Record<string, Record<string, string>>;
+}
+
 export interface TWMConfig {
 	main: TWMMainConfig;
 	layers: TWMLayer[];
 	tilesets: TWMTileset[];
+	props: TWMPropsMap
 }

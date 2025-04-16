@@ -22,13 +22,18 @@ export class TWMConfigParser {
 			tempTileset: {},
 			config: {
 				layers: [],
-				tilesets: []
+				tilesets: [],
+				props: {
+					tilesets: {},
+					layers: {},
+					tiles: {}
+				}
 			},
 		};
 		
 		for (let rawLine of lines) {
 			const line = rawLine.trim();
-			if (!line || line.startsWith(';')) continue;
+			if (!line || line.startsWith('#')) continue;
 			
 			if (line.startsWith('[')) {
 				this.handleSectionHeader(line, state);
@@ -77,6 +82,8 @@ export class TWMConfigParser {
 				name: section.split(':')[1],
 				tiles: [],
 			};
+		} else if (section === 'props') {
+			state.currentSection = 'props';
 		} else {
 			TWErrorHandler.throw(TWErrorCode.UNKNOWN_SECTION, `Unknown section header: [${section}]`, line, 'Parser');
 		}
@@ -92,6 +99,9 @@ export class TWMConfigParser {
 				break;
 			case 'layer':
 				this.handleLayer(key, value, state);
+				break;
+			case 'props':
+				this.handleProps(key, value, state);
 				break;
 			default:
 				TWErrorHandler.throw(TWErrorCode.UNKNOWN_SECTION, `Unhandled section "${state.currentSection}"`, key, 'Parser');
@@ -145,6 +155,35 @@ export class TWMConfigParser {
 						return trimmed;
 					})
 			);
+		}
+	}
+	
+	private static handleProps(key: string, value: string, state: ParserState): void {
+		const parts = key.split('.');
+		if (parts.length < 3) {
+			TWErrorHandler.throw(TWErrorCode.UNKNOWN_PROP_FORMAT, `Invalid props key format`, key, 'Parser');
+		}
+		
+		const [type, identifier, propKey] = parts;
+		
+		switch (type) {
+			case 'tileset':
+				state.config.props!.tilesets[identifier] ??= {};
+				state.config.props!.tilesets[identifier][propKey] = value;
+				break;
+			
+			case 'layer':
+				state.config.props!.layers[identifier] ??= {};
+				state.config.props!.layers[identifier][propKey] = value;
+				break;
+			
+			case 'tile':
+				state.config.props!.tiles[identifier] ??= {};
+				state.config.props!.tiles[identifier][propKey] = value;
+				break;
+			
+			default:
+				TWErrorHandler.throw(TWErrorCode.UNKNOWN_PROP_TYPE, `Unknown props type "${type}"`, key, 'Parser');
 		}
 	}
 }

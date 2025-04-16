@@ -5,6 +5,7 @@ import { TWErrorCode } from "../../core/error/TWErrorCode";
 import { TileValidator } from "../../core/validator/TileValidator";
 import { SceneBuilderUtils } from "../utils/SceneBuilderUtils";
 import { OnTileClickedCallbackFn } from "../interfaces/SceneBuilderEvent";
+import {TileMetadata} from "../interfaces/TileMetadata";
 
 /**
  * SceneBuilder is responsible for constructing and managing a tile-based scene.
@@ -286,7 +287,92 @@ export class SceneBuilder {
 		);
 	}
 	
+	/**
+	 * Returns detailed metadata for all tiles located at the specified (x, y) coordinate.
+	 * Includes the tile code, layer name, tileset short and id, and merged properties
+	 * for each tile present across all layers (bottom to top).
+	 *
+	 * @public
+	 * @param {number} x - X-coordinate of the tile.
+	 * @param {number} y - Y-coordinate of the tile.
+	 * @returns {TileMetadata[]} Array of tile metadata objects ordered from lowest to highest layer.
+	 */
+	public getTileMetadataStack(x: number, y: number): TileMetadata[] {
+		const { width, height } = this.config.main;
+		if (x < 0 || x >= width || y < 0 || y >= height) return [];
+		
+		const { tilesets, props, layers } = this.config;
+		const allLayers = [...layers, ...this.runtimeLayers];
+		
+		const result: TileMetadata[] = []
+		
+		for (const layer of allLayers) {
+			const tileCode = layer.tiles?.[y]?.[x] ?? "0";
+			if (!tileCode || tileCode === "0") continue;
+			
+			const tilesetShort = tileCode.match(/^[A-Z]+/)?.[0] ?? null;
+			const tileset = tilesets.find(ts => ts.short === tilesetShort)
+			
+			const tileProps = props.tiles[tileCode] ?? {};
+			const layerProps = props.layers[layer.name] ?? {};
+			const tilesetProps = tilesetShort ? props.tilesets[tileset!.id] ?? {} : {};
+			const combinedProps = {
+				...tilesetProps,
+				...layerProps,
+				...tileProps,
+			};
+			
+			result.push({
+				tile: tileCode,
+				layerName: layer.name,
+				tilesetShort: tilesetShort as string,
+				tilesetId: tileset!.id,
+				props: combinedProps
+			});
+		}
+		
+		return result;
+	}
+	
+	/**
+	 * Resolves the final combined properties for the tile stack at the given (x, y) coordinate.
+	 * Properties from higher layers override those from lower layers in case of key conflicts.
+	 *
+	 * @public
+	 * @param {number} x - X-coordinate of the tile.
+	 * @param {number} y - Y-coordinate of the tile.
+	 * @returns {Record<string, string>} A merged key-value map of all props at this position.
+	 */
+	
+	public getProps(x: number, y: number): Record<string, string> {
+		const stack = this.getTileMetadataStack(x, y);
+		const mergedProps: Record<string, string> = {};
+		
+		for (const tile of stack) {
+			Object.assign(mergedProps, tile.props);
+		}
+		
+		return mergedProps;
+	}
+	
+	/**
+	 * Returns the resolved properties from the topmost (highest) tile at the given (x, y) coordinate.
+	 * If no tile is found at that position, an empty object is returned.
+	 *
+	 * @public
+	 * @param {number} x - X-coordinate of the tile.
+	 * @param {number} y - Y-coordinate of the tile.
+	 * @returns {Record<string, string>} The property map of the topmost tile, or an empty object if no tile exists.
+	 */
+	public getPropsFromHighestTile(x: number, y: number): Record<string, string> {
+		const stack = this.getTileMetadataStack(x, y);
+		if (stack.length === 0) return {};
+		const topTile = stack[stack.length - 1];
+		return topTile?.props ?? {};
+	}
+	
 	// === Internals ===
+	
 	private buildScene(): void {
 		const { width, height, tileSize: baseSize } = this.config.main;
 		const scale = this.settings.upscale!;
@@ -322,7 +408,7 @@ export class SceneBuilder {
 		});
 	}
 	
-	public updateTileInDOM(layerName: string, x: number, y: number): void {
+	private updateTileInDOM(layerName: string, x: number, y: number): void {
 		const layerEl = this.container.querySelector(`.tw-layer--${layerName}`) as HTMLDivElement;
 		if (!layerEl) return;
 		
