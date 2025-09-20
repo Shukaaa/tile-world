@@ -4,8 +4,20 @@ import { TWErrorHandler } from "../../core/error/TWErrorHandler";
 import { TWErrorCode } from "../../core/error/TWErrorCode";
 import { TileValidator } from "../../core/validator/TileValidator";
 import { SceneBuilderUtils } from "../utils/SceneBuilderUtils";
-import { OnTileClickedCallbackFn } from "../interfaces/SceneBuilderEvent";
+import {
+	OnTileClickedCallbackFn,
+	OnTileHoverCallbackFn,
+	OnTileHoverEndCallbackFn,
+	SceneEventSubscriber
+} from "../interfaces/SceneBuilderEvent";
 import {TileMetadata} from "../interfaces/TileMetadata";
+
+const emptyEventSubscriber: SceneEventSubscriber = {
+	onTileClicked: [],
+	onTileHover: [],
+	onTileHoverEnd: []
+};
+
 
 /**
  * SceneBuilder is responsible for constructing and managing a tile-based scene.
@@ -20,7 +32,7 @@ export class SceneBuilder {
 	
 	private hiddenLayers: string[] = [];
 	private runtimeLayers: TWMLayer[] = [];
-	private onTileClickedEventSubscriber: OnTileClickedCallbackFn[] = [];
+	private eventSubscriber: SceneEventSubscriber = emptyEventSubscriber
 	
 	/**
 	 * Creates an instance of SceneBuilder.
@@ -257,7 +269,29 @@ export class SceneBuilder {
 	 * @returns {void}
 	 */
 	public onTileClickedEvent(cb: OnTileClickedCallbackFn): void {
-		this.onTileClickedEventSubscriber.push(cb);
+		this.eventSubscriber.onTileClicked.push(cb);
+	}
+	
+	/**
+	 * Subscribes a callback function to the tile hover event.
+	 *
+	 * @public
+	 * @param {OnTileHoverCallbackFn} cb - Callback function to invoke when a tile is hovered.
+	 * @returns {void}
+	 */
+	public onTileHoverEvent(cb: OnTileHoverCallbackFn): void {
+		this.eventSubscriber.onTileHover.push(cb);
+	}
+	
+	/**
+	 * Subscribes a callback function to the tile hover end event.
+	 *
+	 * @public
+	 * @param {OnTileHoverEndCallbackFn} cb - Callback function to invoke when tile hover ends.
+	 * @returns {void}
+	 */
+	public onTileHoverEndEvent(cb: OnTileHoverEndCallbackFn): void {
+		this.eventSubscriber.onTileHoverEnd.push(cb);
 	}
 	
 	// === Utilities ===
@@ -283,7 +317,7 @@ export class SceneBuilder {
 				tileSize * scale,
 				tileSize,
 				promises,
-				[]
+				emptyEventSubscriber // Do not add subscriber notification here
 		);
 	}
 	
@@ -395,7 +429,7 @@ export class SceneBuilder {
 					tileSize,
 					baseSize,
 					promises,
-					this.onTileClickedEventSubscriber
+					this.eventSubscriber
 			);
 			wrapper.appendChild(grid);
 		}
@@ -422,7 +456,7 @@ export class SceneBuilder {
 				this.config.main.tileSize * this.settings.upscale!,
 				this.config.main.tileSize,
 				[],
-				this.onTileClickedEventSubscriber
+				this.eventSubscriber
 		);
 		
 		layerEl.replaceChild(tileEl, oldTileEl);
@@ -451,7 +485,7 @@ export class SceneBuilder {
 				tileSize,
 				baseSize,
 				promises,
-				this.onTileClickedEventSubscriber
+				this.eventSubscriber
 		);
 		
 		const wrapper = this.container.querySelector('.tw-scene-wrapper');
