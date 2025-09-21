@@ -32,6 +32,9 @@
     "games",
     "gamemap"
   ],
+  "files": [
+    "dist"
+  ],
   "author": "Shukaaa",
   "license": "ISC",
   "description": ""

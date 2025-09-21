@@ -59,9 +59,6 @@ export class TWMConfigParser {
 		if (!state.config.main) {
 			TWErrorHandler.throw(TWErrorCode.MISSING_SECTION, `Missing [main] section`, undefined, 'Parser');
 		}
-		if (!state.config.layers?.length) {
-			TWErrorHandler.throw(TWErrorCode.MISSING_SECTION, `No layers defined`, undefined, 'Parser');
-		}
 		
 		return state.config as TWMConfig;
 	}

@@ -18,7 +18,6 @@ const emptyEventSubscriber: SceneEventSubscriber = {
 	onTileHoverEnd: []
 };
 
-
 /**
  * SceneBuilder is responsible for constructing and managing a tile-based scene.
  * It handles layers, tiles, settings, and user interactions within a specified container.
@@ -27,12 +26,12 @@ const emptyEventSubscriber: SceneEventSubscriber = {
  */
 export class SceneBuilder {
 	private container: HTMLElement;
-	private config: TWMConfig;
+	private readonly config: TWMConfig;
 	private settings: SceneBuilderSettings;
 	
 	private hiddenLayers: string[] = [];
 	private runtimeLayers: TWMLayer[] = [];
-	private eventSubscriber: SceneEventSubscriber = emptyEventSubscriber
+	eventSubscriber: SceneEventSubscriber = emptyEventSubscriber
 	
 	/**
 	 * Creates an instance of SceneBuilder.
@@ -317,7 +316,8 @@ export class SceneBuilder {
 				tileSize * scale,
 				tileSize,
 				promises,
-				emptyEventSubscriber // Do not add subscriber notification here
+				this,
+				true
 		);
 	}
 	
@@ -407,6 +407,7 @@ export class SceneBuilder {
 	
 	// === Internals ===
 	
+	private lastHoveredTile: { x: number; y: number } = {x: -1, y: -1};
 	private buildScene(): void {
 		const { width, height, tileSize: baseSize } = this.config.main;
 		const scale = this.settings.upscale!;
@@ -417,6 +418,34 @@ export class SceneBuilder {
 		wrapper.style.position = 'relative';
 		wrapper.style.width = `${width * tileSize}px`;
 		wrapper.style.height = `${height * tileSize}px`;
+		
+		wrapper.onmousemove = (e) => {
+			const target = e.target as HTMLElement;
+			const x = parseInt(target.dataset.x!);
+			const y = parseInt(target.dataset.y!);
+			if (isNaN(x) || isNaN(y)) return;
+			if (this.lastHoveredTile.x === x && this.lastHoveredTile.y === y) return;
+			
+			if (this.lastHoveredTile && this.lastHoveredTile.x !== -1 && this.lastHoveredTile.y !== -1) {
+				for (const cb of this.eventSubscriber.onTileHoverEnd) {
+					cb({ x: this.lastHoveredTile.x, y: this.lastHoveredTile.y, originalMouseEvent: e });
+				}
+			}
+			
+			this.lastHoveredTile = { x, y };
+			for (const cb of this.eventSubscriber.onTileHover) {
+				cb({ x, y, originalMouseEvent: e });
+			}
+		}
+		
+		wrapper.onmouseleave = (e) => {
+			if (this.lastHoveredTile && this.lastHoveredTile.x !== -1 && this.lastHoveredTile.y !== -1) {
+				for (const cb of this.eventSubscriber.onTileHoverEnd) {
+					cb({ x: this.lastHoveredTile.x, y: this.lastHoveredTile.y, originalMouseEvent: e });
+				}
+			}
+			this.lastHoveredTile = {x: -1, y: -1};
+		}
 		
 		const promises: Promise<void>[] = [];
 		const allLayers = [...this.config.layers, ...this.runtimeLayers];
@@ -429,7 +458,7 @@ export class SceneBuilder {
 					tileSize,
 					baseSize,
 					promises,
-					this.eventSubscriber
+					this
 			);
 			wrapper.appendChild(grid);
 		}
@@ -456,7 +485,7 @@ export class SceneBuilder {
 				this.config.main.tileSize * this.settings.upscale!,
 				this.config.main.tileSize,
 				[],
-				this.eventSubscriber
+				this
 		);
 		
 		layerEl.replaceChild(tileEl, oldTileEl);
@@ -485,7 +514,7 @@ export class SceneBuilder {
 				tileSize,
 				baseSize,
 				promises,
-				this.eventSubscriber
+				this
 		);
 		
 		const wrapper = this.container.querySelector('.tw-scene-wrapper');

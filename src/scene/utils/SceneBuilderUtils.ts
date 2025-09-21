@@ -3,7 +3,7 @@ import {SceneBuilderSettings} from "../interfaces/SceneBuilderSettings";
 import {TileValidator} from "../../core/validator/TileValidator";
 import {TWErrorCode} from "../../core/error/TWErrorCode";
 import {TWErrorHandler} from "../../core/error/TWErrorHandler";
-import {SceneEventSubscriber} from "../interfaces/SceneBuilderEvent";
+import {SceneBuilder} from "../builder/SceneBuilder";
 
 export class SceneBuilderUtils {
 	
@@ -20,7 +20,7 @@ export class SceneBuilderUtils {
 			tileSize: number,
 			originalTileSize: number,
 			tilePromises: Promise<void>[],
-			eventSubscriber: SceneEventSubscriber
+			builder: SceneBuilder
 	): HTMLDivElement {
 		const grid = document.createElement('div');
 		grid.className = `tw-layer tw-layer--${layer.name}`;
@@ -38,7 +38,7 @@ export class SceneBuilderUtils {
 			for (let x = 0; x < layer.tiles[y].length; x++) {
 				const tileCode = layer.tiles[y][x];
 				const tileEl = SceneBuilderUtils.createTileElement(
-						tileCode, x, y, config, settings, tileSize, originalTileSize, tilePromises, eventSubscriber
+						tileCode, x, y, config, settings, tileSize, originalTileSize, tilePromises, builder
 				);
 				grid.appendChild(tileEl);
 			}
@@ -56,34 +56,27 @@ export class SceneBuilderUtils {
 			tileSize: number,
 			originalTileSize: number,
 			tilePromises: Promise<void>[],
-			eventSubscriber: SceneEventSubscriber
+			builder: SceneBuilder,
+			displayOnlyLayer: boolean = false
 	): HTMLDivElement {
 		const tileEl = document.createElement('div');
 		tileEl.className = 'tw-tile';
 		tileEl.style.width = `${tileSize}px`;
 		tileEl.style.height = `${tileSize}px`;
 		tileEl.style.boxSizing = 'border-box';
-		tileEl.onmousedown = (event: MouseEvent) => {
-			eventSubscriber.onTileClicked.forEach((cb) => {
-				cb({x, y, originalMouseEvent: event})
-			})
-		}
 		
-		tileEl.onmouseover = (event: MouseEvent) => {
-			eventSubscriber.onTileHover.forEach((cb) => {
-				cb({x, y, originalMouseEvent: event})
-			})
-		}
-		
-		tileEl.onmouseout = (event: MouseEvent) => {
-			eventSubscriber.onTileHoverEnd.forEach((cb) => {
-				cb({x, y, originalMouseEvent: event})
-			})
-		}
-		
-		if (!settings.disableDataAttributesForTiles) {
-			tileEl.dataset['x'] = x.toString();
-			tileEl.dataset['y'] = y.toString();
+		if (!displayOnlyLayer) {
+			tileEl.onmousedown = (event: MouseEvent) => {
+				const eventSubscriber = builder.eventSubscriber;
+				eventSubscriber.onTileClicked.forEach((cb) => {
+					cb({x, y, originalMouseEvent: event})
+				})
+			}
+			
+			if (!settings.disableDataAttributesForTiles) {
+				tileEl.dataset['x'] = x.toString();
+				tileEl.dataset['y'] = y.toString();
+			}
 		}
 		
 		if (settings.showDebugGrid) {

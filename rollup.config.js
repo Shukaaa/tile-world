@@ -25,7 +25,7 @@ export default [
 			nodeResolve(),
 			typescript({
 				tsconfig: './tsconfig.json',
-				declaration: false,
+				declaration: true,
 				emitDeclarationOnly: false,
 			})
 		]

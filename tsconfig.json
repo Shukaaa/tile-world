@@ -2,8 +2,8 @@
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",
-    "moduleResolution": "Bundler",
     "declaration": true,
+    "moduleResolution": "Bundler",
     "emitDeclarationOnly": true,
     "declarationDir": "./dist/types",
     "rootDir": "src",
