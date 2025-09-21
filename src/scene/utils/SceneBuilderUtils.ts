@@ -5,6 +5,7 @@ import {TWErrorCode} from "../../core/error/TWErrorCode";
 import {TWErrorHandler} from "../../core/error/TWErrorHandler";
 import {SceneBuilder} from "../builder/SceneBuilder";
 import {TileConfig} from "../interfaces/TileConfig";
+import {TileCache} from "../cache/TileCache";
 
 export class SceneBuilderUtils {
 	
@@ -133,28 +134,15 @@ export class SceneBuilderUtils {
 		const img = new Image();
 		img.src = tileset.tileset;
 		
-		const promise = new Promise<void>((resolve, reject) => {
-			img.onload = () => {
-				const tilesPerRow = Math.floor(img.width / originalTileSize);
-				const tileX = (index % tilesPerRow) * originalTileSize;
-				const tileY = Math.floor(index / tilesPerRow) * originalTileSize;
-				
-				tileEl.style.backgroundImage = `url(${img.src})`;
-				tileEl.style.backgroundPosition = `-${tileX * settings.upscale!}px -${tileY * settings.upscale!}px`;
-				tileEl.style.backgroundSize = `${img.width * settings.upscale!}px auto`;
-				tileEl.style.imageRendering = 'pixelated';
-				
-				resolve();
-			};
+		const promise = TileCache.get(tileset.tileset).then((img) => {
+			const tilesPerRow = Math.floor(img.width / originalTileSize);
+			const tileX = (index % tilesPerRow) * originalTileSize;
+			const tileY = Math.floor(index / tilesPerRow) * originalTileSize;
 			
-			img.onerror = () => reject(
-					TWErrorHandler.throw(
-							TWErrorCode.FAILED_TO_LOAD_IMAGE,
-							`Failed to load tileset image "${tileset.tileset}"`,
-							`Tileset: ${tileset.id}`,
-							'SceneBuilderUtils'
-					)
-			);
+			tileEl.style.backgroundImage = `url(${img.src})`;
+			tileEl.style.backgroundPosition = `-${tileX * settings.upscale!}px -${tileY * settings.upscale!}px`;
+			tileEl.style.backgroundSize = `${img.width * settings.upscale!}px auto`;
+			tileEl.style.imageRendering = 'pixelated';
 		});
 		
 		tilePromises.push(promise);

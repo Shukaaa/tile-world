@@ -411,6 +411,8 @@ export class SceneBuilder {
 	
 	private lastHoveredTile: { x: number; y: number } = {x: -1, y: -1};
 	private buildScene(): void {
+		const start = performance.now();
+		
 		const { width, height, tileSize: baseSize } = this.config.main;
 		const scale = this.settings.upscale!;
 		const tileSize = baseSize * scale;
@@ -468,7 +470,10 @@ export class SceneBuilder {
 		this.container.innerHTML = '';
 		this.container.appendChild(wrapper);
 		
-		Promise.all(promises).catch(err => {
+		Promise.all(promises).then(() => {
+			const end = performance.now();
+			console.log(`SceneBuilder ready in ${(end - start).toFixed(2)} ms`);
+		}).catch(err => {
 			console.error('SceneBuilder: Error loading tilesets', err);
 		});
 	}
