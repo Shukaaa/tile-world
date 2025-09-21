@@ -11,6 +11,7 @@ import {
 	SceneEventSubscriber
 } from "../interfaces/SceneBuilderEvent";
 import {TileMetadata} from "../interfaces/TileMetadata";
+import {TileConfig} from "../interfaces/TileConfig";
 
 const emptyEventSubscriber: SceneEventSubscriber = {
 	onTileClicked: [],
@@ -178,11 +179,12 @@ export class SceneBuilder {
 	 * @param {number} x - X-coordinate of the tile.
 	 * @param {number} y - Y-coordinate of the tile.
 	 * @param {string} tileCode - Code representing the tile.
+	 * @param additionalConfig - Optional additional configuration for the tile.
 	 * @throws {TWErrorCode.LAYER_NOT_FOUND} If the specified layer does not exist.
 	 * @throws {TWErrorCode.INVALID_TILE_POSITION} If the coordinates are out of bounds.
 	 * @returns {void}
 	 */
-	public addTile(layerName: string, x: number, y: number, tileCode: string): void {
+	public addTile(layerName: string, x: number, y: number, tileCode: string, additionalConfig: TileConfig | null): void {
 		TileValidator.validateTileFormat(tileCode, `addTile: ${tileCode} @ (${x},${y})`);
 		const layer = this.runtimeLayers.find(l => l.name === layerName);
 		
@@ -206,7 +208,7 @@ export class SceneBuilder {
 		}
 		
 		layer.tiles[y][x] = tileCode;
-		this.updateTileInDOM(layerName, x, y);
+		this.updateTileInDOM(layerName, x, y, additionalConfig);
 	}
 	
 	/**
@@ -243,7 +245,7 @@ export class SceneBuilder {
 		}
 		
 		layer.tiles[y][x] = "0";
-		this.updateTileInDOM(layerName, x, y);
+		this.updateTileInDOM(layerName, x, y, null);
 	}
 	
 	/**
@@ -471,7 +473,7 @@ export class SceneBuilder {
 		});
 	}
 	
-	private updateTileInDOM(layerName: string, x: number, y: number): void {
+	private updateTileInDOM(layerName: string, x: number, y: number, config: TileConfig | null): void {
 		const layerEl = this.container.querySelector(`.tw-layer--${layerName}`) as HTMLDivElement;
 		if (!layerEl) return;
 		
@@ -485,7 +487,9 @@ export class SceneBuilder {
 				this.config.main.tileSize * this.settings.upscale!,
 				this.config.main.tileSize,
 				[],
-				this
+				this,
+				false,
+				config
 		);
 		
 		layerEl.replaceChild(tileEl, oldTileEl);

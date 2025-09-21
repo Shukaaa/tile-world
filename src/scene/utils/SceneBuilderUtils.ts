@@ -4,6 +4,7 @@ import {TileValidator} from "../../core/validator/TileValidator";
 import {TWErrorCode} from "../../core/error/TWErrorCode";
 import {TWErrorHandler} from "../../core/error/TWErrorHandler";
 import {SceneBuilder} from "../builder/SceneBuilder";
+import {TileConfig} from "../interfaces/TileConfig";
 
 export class SceneBuilderUtils {
 	
@@ -57,13 +58,23 @@ export class SceneBuilderUtils {
 			originalTileSize: number,
 			tilePromises: Promise<void>[],
 			builder: SceneBuilder,
-			displayOnlyLayer: boolean = false
+			displayOnlyLayer: boolean = false,
+			additionalConfig: TileConfig | null = null,
 	): HTMLDivElement {
 		const tileEl = document.createElement('div');
 		tileEl.className = 'tw-tile';
 		tileEl.style.width = `${tileSize}px`;
 		tileEl.style.height = `${tileSize}px`;
 		tileEl.style.boxSizing = 'border-box';
+		
+		if (additionalConfig) {
+			if (additionalConfig.opacity !== undefined) {
+				tileEl.style.opacity = additionalConfig.opacity.toString();
+			}
+			if (additionalConfig.rotation !== undefined) {
+				tileEl.style.transform = `rotate(${additionalConfig.rotation}deg)`;
+			}
+		}
 		
 		if (!displayOnlyLayer) {
 			tileEl.onmousedown = (event: MouseEvent) => {
