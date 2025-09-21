@@ -74,6 +74,12 @@ export class SceneBuilderUtils {
 			if (additionalConfig.rotation !== undefined) {
 				tileEl.style.transform = `rotate(${additionalConfig.rotation}deg)`;
 			}
+			if (additionalConfig.flipX !== undefined && additionalConfig.flipX) {
+				tileEl.style.transform += ` scaleX(-1)`;
+			}
+			if (additionalConfig.flipY !== undefined && additionalConfig.flipY) {
+				tileEl.style.transform += ` scaleY(-1)`;
+			}
 		}
 		
 		if (!displayOnlyLayer) {
